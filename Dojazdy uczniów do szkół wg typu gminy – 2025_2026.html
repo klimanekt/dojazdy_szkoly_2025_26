@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dojazdy uczniów do szkół wg typu gminy – 2025/2026</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+.viz-root{--surface-1:#fcfcfb;--text-primary:#0b0b0b;--text-secondary:#52514e;--grid:#e4e3df;
+ --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{color-scheme:dark;--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;--grid:#3a3936;--s1:#3987e5;--s2:#d95926;--s3:#199e70}}
+:root[data-theme="dark"] .viz-root{color-scheme:dark;--surface-1:#1a1a19;--text-primary:#f0efec;--text-secondary:#c3c2b7;--grid:#3a3936;--s1:#3987e5;--s2:#d95926;--s3:#199e70}
+html,body{margin:0}
+.viz-root{background:var(--surface-1);color:var(--text-primary);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh;padding:24px;box-sizing:border-box}
+.wrap{max-width:1000px;margin:0 auto}
+h1{font-size:20px;font-weight:600;margin:0 0 4px}
+.sub{color:var(--text-secondary);font-size:14px;margin:0 0 16px}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.ctrl button{font:inherit;font-size:14px;padding:6px 14px;border-radius:999px;border:1px solid var(--grid);background:transparent;color:var(--text-primary);cursor:pointer}
+.ctrl button[aria-pressed="true"]{background:var(--text-primary);color:var(--surface-1);border-color:var(--text-primary)}
+#chart{width:100%;height:550px}
+.kpis{display:flex;gap:24px;flex-wrap:wrap;margin:8px 0 16px}
+.kpi .v{font-size:22px;font-weight:600}.kpi .l{font-size:12px;color:var(--text-secondary)}
+table{border-collapse:collapse;font-size:13px;width:100%;margin-top:8px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;border-bottom:1px solid var(--grid);text-align:right}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--text-secondary);font-weight:500}
+details{margin-top:16px}summary{cursor:pointer;color:var(--text-secondary);font-size:14px}
+.note{font-size:12px;color:var(--text-secondary);margin-top:16px;line-height:1.5}
+.js-plotly-plot .hoverlayer .hovertext path{fill-opacity:1!important}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+</style></head>
+<body><div class="viz-root"><div class="wrap">
+<div class="ctrl" role="group" aria-label="Poziom szkół">
+ <button data-k="pod" aria-pressed="false">Szkoły podstawowe</button>
+ <button data-k="ponad" aria-pressed="true">Szkoły ponadpodstawowe</button>
+ <button data-k="razem" aria-pressed="false">Razem</button>
+</div>
+<div class="ctrl" role="group" aria-label="Skala">
+ <button data-mode="abs" aria-pressed="true">Liczba uczniów</button>
+ <button data-mode="share" aria-pressed="false">Struktura % wyjazdów wg typu gminy zamieszkania</button>
+</div>
+<div class="kpis" id="kpis"></div>
+<div id="chart"></div>
+<details open><summary>Tabela przepływów</summary><div id="tbl"></div></details>
+</div></div>
+<script>
+const RAW={"pod": {"Miejska|Miejska": 12296, "Miejska|Miejsko-wiejska": 3801, "Miejska|Wiejska": 15574, "Miejsko-wiejska|Miejska": 18544, "Miejsko-wiejska|Miejsko-wiejska": 11885, "Miejsko-wiejska|Wiejska": 13209, "Wiejska|Miejska": 73094, "Wiejska|Miejsko-wiejska": 17514, "Wiejska|Wiejska": 21817}, "ponad": {"Miejska|Miejska": 65359, "Miejska|Miejsko-wiejska": 8566, "Miejska|Wiejska": 7543, "Miejsko-wiejska|Miejska": 156300, "Miejsko-wiejska|Miejsko-wiejska": 52906, "Miejsko-wiejska|Wiejska": 9943, "Wiejska|Miejska": 351919, "Wiejska|Miejsko-wiejska": 75083, "Wiejska|Wiejska": 14120}};
+const T=['Miejska','Miejsko-wiejska','Wiejska'];
+const LAB={'Miejska':'Gmina miejska','Miejsko-wiejska':'Gmina miejsko-wiejska','Wiejska':'Gmina wiejska'};
+RAW.razem={};for(const k in RAW.pod)RAW.razem[k]=RAW.pod[k]+RAW.ponad[k];
+let cur='ponad',mode='abs';
+const css=n=>getComputedStyle(document.querySelector('.viz-root')).getPropertyValue(n).trim();
+const fmt=v=>v.toLocaleString('pl-PL');
+const pct=v=>(v*100).toLocaleString('pl-PL',{maximumFractionDigits:1})+'%';
+function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
+function draw(){
+ const d=RAW[cur],cols=[css('--s1'),css('--s2'),css('--s3')];
+ const out={},inn={};let tot=0;
+ T.forEach(t=>{out[t]=0;inn[t]=0});
+ for(const k in d){const[a,b]=k.split('|');out[a]+=d[k];inn[b]+=d[k];tot+=d[k]}
+ const src=[],tgt=[],val=[],lc=[],cd=[];
+ T.forEach((a,i)=>T.forEach((b,j)=>{const v=d[a+'|'+b];
+   src.push(i);tgt.push(j+3);val.push(mode==='abs'?v:v/out[a]*100);lc.push(rgba(cols[i],.38));
+   cd.push([LAB[a],LAB[b],fmt(v),pct(v/out[a]),pct(v/inn[b]),pct(v/tot)])}));
+ const nodeLab=T.map(t=>LAB[t]+'<br>'+(mode==='abs'?fmt(out[t]):'100%'))
+   .concat(T.map(t=>LAB[t]+'<br>'+(mode==='abs'?fmt(inn[t]):'')));
+ const ncd=T.map(t=>['Wyjeżdżający z gmin typu: '+LAB[t],fmt(out[t]),pct(out[t]/tot)])
+   .concat(T.map(t=>['Przyjeżdżający do gmin typu: '+LAB[t],fmt(inn[t]),pct(inn[t]/tot)]));
+ const tc=css('--text-primary');
+ const hl={bgcolor:css('--surface-1'),bordercolor:css('--grid'),font:{color:tc,size:13},align:'left'};
+ Plotly.react('chart',[{type:'sankey',arrangement:'fixed',valueformat:',.0f',
+  node:{label:nodeLab,color:cols.concat(cols),pad:22,thickness:18,line:{color:css('--surface-1'),width:2},
+   x:[0.001,0.001,0.001,0.999,0.999,0.999],customdata:ncd,hoverlabel:hl,
+   hovertemplate:'%{customdata[0]}<br><b>%{customdata[1]}</b> uczniów (%{customdata[2]} wszystkich)<extra></extra>'},
+  link:{source:src,target:tgt,value:val,color:lc,customdata:cd,hoverlabel:hl,
+   hovertemplate:'<b>Skąd:</b> %{customdata[0]}<br><b>Dokąd:</b> %{customdata[1]}<br>%{customdata[2]} uczniów<br>%{customdata[3]} wyjeżdżających z tego typu gminy<br>%{customdata[4]} przyjeżdżających do tego typu gminy<br>%{customdata[5]} wszystkich przepływów<extra></extra>'}}],
+  {margin:{l:10,r:10,t:40,b:10},paper_bgcolor:css('--surface-1'),
+   annotations:[{x:0,y:1.07,xref:'paper',yref:'paper',xanchor:'left',showarrow:false,text:'<b>SKĄD</b> · gmina zamieszkania',font:{size:13,color:css('--text-secondary')}},
+    {x:0.5,y:1.07,xref:'paper',yref:'paper',xanchor:'center',showarrow:false,text:'⟶',font:{size:18,color:css('--text-secondary')}},
+    {x:1,y:1.07,xref:'paper',yref:'paper',xanchor:'right',showarrow:false,text:'<b>DOKĄD</b> · gmina szkoły',font:{size:13,color:css('--text-secondary')}}],font:{color:tc,size:13,family:'system-ui,-apple-system,Segoe UI,sans-serif'},
+   hoverlabel:{bgcolor:css('--surface-1'),bordercolor:css('--grid'),font:{color:tc}}},
+  {displayModeBar:false,responsive:true});
+ // KPIs
+ const toCity=inn['Miejska']/tot;
+ document.getElementById('kpis').innerHTML=
+  `<div class="kpi"><div class="v">${fmt(tot)}</div><div class="l">uczniów dojeżdżających do innej gminy</div></div>`+
+  `<div class="kpi"><div class="v">${pct(toCity)}</div><div class="l">dojeżdża do gmin miejskich</div></div>`+
+  `<div class="kpi"><div class="v">${pct(d['Wiejska|Miejska']/tot)}</div><div class="l">to przepływ wieś → miasto</div></div>`;
+ // table
+ let h='<table><thead><tr><th>Gmina zamieszkania \\ gmina szkoły</th>'+T.map((t,i)=>`<th><span class="sw" style="background:${cols[i]}"></span>${LAB[t]}</th>`).join('')+'<th>Razem</th></tr></thead><tbody>';
+ T.forEach((a,i)=>{h+=`<tr><td><span class="sw" style="background:${cols[i]}"></span>${LAB[a]}</td>`+T.map(b=>`<td>${fmt(d[a+'|'+b])}<br><span style="color:var(--text-secondary)">${pct(d[a+'|'+b]/out[a])}</span></td>`).join('')+`<td><b>${fmt(out[a])}</b></td></tr>`});
+ h+='<tr><td><b>Razem</b></td>'+T.map(b=>`<td><b>${fmt(inn[b])}</b></td>`).join('')+`<td><b>${fmt(tot)}</b></td></tr></tbody></table>`;
+ document.getElementById('tbl').innerHTML=h;
+}
+document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{cur=b.dataset.k;document.querySelectorAll('[data-k]').forEach(x=>x.setAttribute('aria-pressed',x===b));draw()});
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.mode;document.querySelectorAll('[data-mode]').forEach(x=>x.setAttribute('aria-pressed',x===b));draw()});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',draw);
+new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+draw();
+</script></body></html>
